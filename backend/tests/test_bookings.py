@@ -108,3 +108,52 @@ def test_unknown_attendee(client):
         },
     )
     assert res.status_code == 400
+
+
+def test_suggest_returns_first_three_available_slots(client):
+    res = client.post(
+        "/rooms/3/suggest",
+        json={
+            "requester_id": 4,
+            "attendee_ids": [2],
+            "duration_minutes": 45,
+            "date": "2026-12-07",
+        },
+    )
+    assert res.status_code == 200
+    slots = res.json()["slots"]
+    assert len(slots) == 3
+    assert [slot["start"] for slot in slots] == sorted(slot["start"] for slot in slots)
+    assert slots[0] == {
+        "start": "2026-12-07T09:30:00+05:30",
+        "end": "2026-12-07T10:15:00+05:30",
+    }
+
+
+def test_suggest_respects_attendee_conflicts_and_returns_empty_weekend(client):
+    attendee_conflict = client.post(
+        "/rooms/3/suggest",
+        json={
+            "requester_id": 4,
+            "attendee_ids": [1],
+            "duration_minutes": 30,
+            "date": "2026-12-07",
+        },
+    )
+    assert attendee_conflict.status_code == 200
+    assert attendee_conflict.json()["slots"][0]["start"] == "2026-12-07T10:00:00+05:30"
+
+    weekend = client.post(
+        "/rooms/3/suggest",
+        json={"requester_id": 4, "attendee_ids": [], "duration_minutes": 30, "date": "2026-12-12"},
+    )
+    assert weekend.status_code == 200
+    assert weekend.json()["slots"] == []
+
+
+def test_suggest_rejects_invalid_duration(client):
+    res = client.post(
+        "/rooms/3/suggest",
+        json={"requester_id": 1, "attendee_ids": [], "duration_minutes": 20, "date": "2026-12-07"},
+    )
+    assert res.status_code == 422
