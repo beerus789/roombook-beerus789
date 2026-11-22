@@ -44,6 +44,32 @@ def test_overlapping_booking_is_rejected(client):
     assert res.status_code == 409
 
 
+def test_back_to_back_bookings_are_allowed(client):
+    first = client.post(
+        "/bookings",
+        json={
+            "room_id": 3,
+            "creator_id": 2,
+            "attendee_ids": [2],
+            "start": "2026-12-11T10:00:00",
+            "end": "2026-12-11T11:00:00",
+        },
+    )
+    second = client.post(
+        "/bookings",
+        json={
+            "room_id": 3,
+            "creator_id": 2,
+            "attendee_ids": [2],
+            "start": "2026-12-11T11:00:00",
+            "end": "2026-12-11T12:00:00",
+        },
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+
 def test_end_must_be_after_start(client):
     res = client.post(
         "/bookings",
