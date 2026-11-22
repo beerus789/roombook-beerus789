@@ -7,7 +7,7 @@ The task is in [ASSIGNMENT.md](ASSIGNMENT.md).
 ## Requirements
 
 - Python 3.11+
-- Node 18+
+- Node 22.12+ (the frontend test runner requires this patched runtime)
 - Optional: Docker (for PostgreSQL). Without it, the backend uses a local SQLite file.
 
 ## Backend
@@ -37,7 +37,10 @@ uvicorn app.main:app --reload
 | Variable | Default | Meaning |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./roombook.db` | SQLAlchemy database URL |
-| `SIMULATED_LATENCY_MS` | `800` | Adds a random 0–N ms delay to GET requests, to make local dev behave more like a real network. Set to `0` to turn it off. |
+| `SIMULATED_LATENCY_MS` | `0` | Optional local-dev random 0–N ms delay for GET requests. Enable only when you want to simulate a slower network. |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated exact origins allowed by the API, for example `https://rooms.example.com`. |
+
+`GET /health/live` checks that the process is running. `GET /health/ready` (also available at `/health`) checks database connectivity.
 
 ### Tests
 
@@ -57,6 +60,13 @@ npm run dev
 ```
 
 Open http://localhost:5173. The dev server proxies `/api/*` to the backend on port 8000.
+
+Frontend checks:
+
+```bash
+npm test
+npm run build
+```
 
 ## Sample data
 
@@ -85,9 +95,17 @@ Open http://localhost:5173. The dev server proxies `/api/*` to the backend on po
 | GET | `/rooms/{id}` | |
 | POST | `/rooms` | `{name, capacity}` |
 | GET | `/users` | |
-| GET | `/bookings?date=YYYY-MM-DD&room_id=` | Both filters optional |
-| POST | `/bookings` | `{room_id, creator_id, title, attendee_ids, start, end}`; returns `409` if the room is taken |
-| POST | `/rooms/{id}/suggest` | `{requester_id, attendee_ids, duration_minutes, date}`; returns up to three earliest available slots |
+| GET | `/bookings?date=YYYY-MM-DD&room_id=&limit=100&offset=0` | Filters optional; limit is 1–500 and results have stable start/id ordering |
+| POST | `/bookings` | `{room_id, creator_id, title, attendee_ids, start, end}`; returns `409` if the room or a participant is unavailable |
+| POST | `/rooms/{id}/suggest` | `{requester_id, attendee_ids, duration_minutes, date}`; returns up to 3 earliest available slots |
+
+Booking timestamps are interpreted as IST when no UTC offset is supplied. Offset-aware timestamps are converted to IST, and API responses include the `+05:30` offset. Booking creation enforces office hours, 15-minute increments, lunch and room rules, attendee availability, and cleaning buffers in addition to preventing room conflicts. Conflict responses use `409`.
+
+The creator counts as a participant for room capacity. The request may include at most 100 attendee IDs, and distinct participant count cannot exceed room capacity. Room names are trimmed and case-insensitive duplicates are rejected.
+
+The slot suggestion endpoint returns an empty list on weekends. Its candidate slots begin on 15-minute boundaries and are limited to 09:30–18:30 IST, Monday through Friday. A requester is treated as a participant even when not repeated in `attendee_ids`.
+
+Booking writes use PostgreSQL row locks for rooms and participants. SQLite uses an immediate write transaction to serialize availability checks. Availability queries are filtered to the requested room and participants, with indexes for the reverse attendee lookup and room/time range. This protects writes made through the application; direct database writes can bypass the checks. See [`DECISIONS.md`](DECISIONS.md) for trade-offs and remaining work.
 
 ### Examples
 
