@@ -18,6 +18,13 @@
 
 - Codex helped inspect the starter and draft the fix and regression test. An early AI routing suggestion put the future slot suggestion endpoint under the bookings router, which would produce the wrong URL; I checked the required path and rejected that placement.
 
+## Task 2: Slot suggestion assumptions
+
+- Naive timestamps mean IST; offset-aware timestamps are converted to IST. This preserves the starter's timestamp storage for now, but a production migration should use UTC-aware storage.
+- The requester counts as a participant even if omitted from `attendee_ids`; their existing meetings therefore block suggestions.
+- Meetings of 30 minutes or less may overlap lunch; longer ones may not. Cleaning time applies only after meetings longer than 60 minutes and blocks the room, not attendee availability.
+- Suggestions are empty on weekends and return up to the first three valid slots, ordered earliest first.
+
 ## With more time
 
 - Continue with the assignment's separate slot API, concurrency, and UI pull requests. Add authorization, migrations, PostgreSQL integration coverage, and load tests before production.
